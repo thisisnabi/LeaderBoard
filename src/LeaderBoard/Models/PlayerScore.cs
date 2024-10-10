@@ -2,7 +2,9 @@
 
 public class PlayerScore : BaseScoreType
 {
-    public int Id { get; set; }
+    public const string RedisKey = "PlayerScore";
+
+    [Element]
     public string Username { get; set; } = null!;
 }
  

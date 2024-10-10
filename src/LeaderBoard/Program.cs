@@ -1,51 +1,20 @@
- var builder = WebApplication.CreateBuilder(args);
+using LeaderBoard.Models;
+using MassTransit.Initializers;
+using StackExchange.Redis;
+
+var builder = WebApplication.CreateBuilder(args);
 
 builder.BrokerConfigure();
-builder.ConfigureApplicationDbContext();
-builder.Services.AddSingleton<SortedInMemoryDatabase>();
+builder.ConfigureRedis();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
+builder.Services.AddScoped<ScoreService>();
 
 var app = builder.Build();
 
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseHttpsRedirection();
-
-
-app.MapGet("/{topic}", (string Topic, int K , LeaderBoardDbContext dbContext) =>
-{
-    if (Topic == "order")
-    {
-        var items = dbContext.MostSoldProducts.OrderByDescending(d => d.Score)
-                                              .Take(K);
-        return Results.Ok(items);
-    }
-    else if (Topic == "game")
-    {
-        var items = dbContext.PlayerScores.OrderByDescending(d => d.Score)
-                                      .Take(K);
-        return Results.Ok(items);
-    }
-
-    throw new InvalidOperationException();
-});
-
-app.MapGet("/{topic}/sorted-set", (string Topic, int K, SortedInMemoryDatabase sortedDatabase) =>
-{
-    if (Topic == "order")
-    {
-       
-        return Results.Ok(sortedDatabase.MostSoldProducts);
-    }
-    else if (Topic == "game")
-    {
-        return Results.Ok(sortedDatabase.PlayerScores);
-    }
-
-    throw new InvalidOperationException();
-});
 
 app.MapPost("/game", async (string player, int score, IPublishEndpoint endpoint) =>
 {
@@ -56,6 +25,20 @@ app.MapPost("/ordering", async (string catalod_id, IPublishEndpoint endpoint) =>
 {
     await endpoint.Publish(new SoldProductEvent(catalod_id));
 });
+
+app.MapGet("/top/{topic}", async (int K, string topic, ScoreService scoreService) =>
+{
+    var items = await scoreService.GetTop<MostSoldProduct>(topic, K);
+    return Results.Ok(items);
+});
+
+app.MapGet("/top/{topic}/game", async (int K, string topic, ScoreService scoreService) =>
+{
+    var items = await scoreService.GetTop<PlayerScore>(topic, K);
+    return Results.Ok(items);
+});
+
+
 
 app.Run();
 
@@ -86,11 +69,15 @@ public static class WebApplicationExtensions
         });
     }
 
-    public static void ConfigureApplicationDbContext(this WebApplicationBuilder builder)
+    public static void ConfigureRedis(this WebApplicationBuilder builder)
     {
-        builder.Services.AddDbContext<LeaderBoardDbContext>(configure =>
+        builder.Services.AddSingleton<IConnectionMultiplexer>(ps =>
         {
-            configure.UseInMemoryDatabase(nameof(LeaderBoardDbContext));
+            var connectionString = builder.Configuration.GetConnectionString("RedisConnection");
+            if (connectionString is null)
+                throw new ArgumentNullException(nameof(connectionString));
+
+            return ConnectionMultiplexer.Connect(connectionString);
         });
     }
 }

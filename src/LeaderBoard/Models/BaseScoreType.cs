@@ -1,4 +1,6 @@
-﻿namespace LeaderBoard.Models;
+﻿
+
+namespace LeaderBoard.Models;
 
 public abstract class BaseScoreType
 {
